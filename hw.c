@@ -32,12 +32,6 @@ struct page_table_entry {
     int page_num;
 };
 
-// struct singe_page {
-//     int page_number;
-//     int address;
-// };
-
-
 // page table
 struct page_table_entry page_table[PTE_COUNT];
 
@@ -48,7 +42,7 @@ struct m_entry main_memory[MM_ADDR];
 struct m_entry disk[VM_ADDR];
 
 int oldest_page = 0;
-int page_accesses[8];
+int page_accesses[4];
 
 
 
@@ -71,9 +65,7 @@ void initialize(){
         }
         main_memory[j].page = page_count;
         main_memory[j].addr = j;
-        main_memory[j].data = -1;
-        
-        
+        main_memory[j].data = -1;        
     }
 
     // initialize disk memory
@@ -92,16 +84,16 @@ void initialize(){
 
 int find_available_page(){
     int i;
-    int mark_pages[PTE_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0};
+    int mark_memory[4] = {0, 0, 0, 0};
     
-    for (i = 0; i < PTE_COUNT; i++) {
+    for (i = 0; i < 4; i++) {
         if (page_table[i].valid == 1){
-            mark_pages[page_table[i].page_num] = 1;
+            mark_memory[page_table[i].page_num] = 1;
         }
     }
 
-    for (i = 0; i < PTE_COUNT; i++){
-        if (mark_pages[i] == 0){
+    for (i = 0; i < 4; i++){
+        if (mark_memory[i] == 0){
             return i;
         }
     }
@@ -124,9 +116,6 @@ int get_mm_addr(int avail_page){
 
 int fifo() {
     int victim_page;
-//      Find a victim page in main memory
-//  Copy victim to disk if it is dirty
-//  Copy disk page to victim page
     victim_page = oldest_page++;
 
     if (victim_page == 3) {
@@ -136,13 +125,10 @@ int fifo() {
 }
 
 int lru() {
-//      Find a victim page in main memory
-//  Copy victim to disk if it is dirty
-//  Copy disk page to victim page
     int i;
     int victim_page = 0;
     int min_access = 255;
-    for (i = 0; i < 8; i++){
+    for (i = 0; i < 4; i++){
         if (page_accesses[i] < min_access){
             victim_page = i;
             min_access = page_accesses[i];
@@ -165,6 +151,7 @@ int main(int argc, char* argv[]) {
     initialize();
     
     while (!NULL) {
+        // parse through input
         char line[MAX_CHAR];
         char* args[13];
 
@@ -184,14 +171,6 @@ int main(int argc, char* argv[]) {
             break;
         }
         else if (strcmp(args[0], "read") == 0) {
-            // Argument is a virtual address
-            // • Check if the virtual page is in memory
-            // • If the page is in main memory, then read the data
-            // from the correct byte in the page
-            //  Read from main memory, not disk
-            // • If the page is not in main memory then page fault
-            // • After page fault, read the data from the correct
-            // byte in the page
             int virtual_addr = atoi(args[1]);
             int virtual_page = virtual_addr >> 3;
             int ppage_num = page_table[virtual_page].page_num;
@@ -206,10 +185,12 @@ int main(int argc, char* argv[]) {
             // page is on disk
             else if (page_table[virtual_page].valid == 0){
                 printf("A Page Fault Has Occurred\n");
-                printf("%d\n", disk[physical_addr].data);
                 
+                // find next available page
                 int avail_page = find_available_page();
                 
+                int disk_page = virtual_page;
+
                 if (avail_page == -1){
                     if (is_fifo){
                         // go to fifo function
@@ -220,32 +201,46 @@ int main(int argc, char* argv[]) {
                         // go to lru function
                         avail_page = lru();
                     }
+                    
+                    // if its dirty, new disk location
+                    int i;
+                    for (i = 0; i < 8; i++){
+                        if (page_table[i].page_num == avail_page && page_table[i].valid == 1){
+                            disk_page = i;
+                            break;
+                        }
+                    }
                 }
 
-                // next available page is found
-                int physical_addr = get_mm_addr(avail_page);
-                printf("%d AVAILABLE PAGE\n", physical_addr);
-                int disk_addr = (virtual_page * 8);
-                
-                int i;
+                int disk_addr = (disk_page * 8);
+                int physical_addr = (avail_page * 8);
+
                 int tempData[8];
-                if (page_table[avail_page].dirty == 1) {
+                int i;
+
+                // if dirty in disk
+                if (page_table[disk_page].dirty == 1) {
                     for (i = 0; i < 8; i++) {
                         tempData[i] = main_memory[physical_addr + i].data;
                         main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                         disk[disk_addr + i].data = tempData[i];
                     }
+                    // reset dirty entry
+                    page_table[disk_page].valid = 0;
+                    page_table[disk_page].dirty = 0;
+                    page_table[disk_page].page_num = disk_page;
                 }
+                // not dirty, so no swapping
                 else {
                     for (i = 0; i < 8; i++) {
                         main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                     }
                 }
-                    
                 page_table[virtual_page].valid = 1;
                 page_table[virtual_page].page_num = avail_page;
                 page_table[virtual_page].dirty = 0;
-
+                    
+                printf("%d\n", main_memory[physical_addr + offset].data);
                 page_accesses[avail_page]++;
             }
         }
@@ -256,8 +251,6 @@ int main(int argc, char* argv[]) {
             int ppage_num = page_table[virtual_page].page_num;
             int offset = virtual_addr % 8;
             int physical_addr = (ppage_num * 8) + offset;
-
-            // printf("%d VIRTUAL PAGW\n", virtual_page);
             
             // page is in main memory
             if (page_table[virtual_page].valid == 1){
@@ -270,7 +263,7 @@ int main(int argc, char* argv[]) {
                 printf("A Page Fault Has Occurred\n");
                 
                 int avail_page = find_available_page();
-                // printf("%d IHSFJSDNFJSDFJSNJK\n", avail_page);
+                int disk_page = virtual_page;
                 
                 if (avail_page == -1){
                     if (is_fifo){
@@ -282,17 +275,25 @@ int main(int argc, char* argv[]) {
                         // go to lru function
                         avail_page = lru();
                     }
+
+                    // if its dirty, new disk location
+                    int i;
+                    for (i = 0; i < 8; i++){
+                        if (page_table[i].page_num == avail_page && page_table[i].valid == 1){
+                            disk_page = i;
+                            break;
+                        }
+                    }
                 }
 
-                // next available page is found                
-                physical_addr = get_mm_addr(avail_page);
-                // printf("%d DIS THE ADDRESS WE START AT \n", physical_addr);
-                int disk_addr = (virtual_page * 8);
+                // // next available page is found                
+                int disk_addr = (disk_page * 8);
+                int physical_addr = (avail_page * 8);
                 
-                int i;
-                int tempData[8];
 
-                if (page_table[avail_page].dirty == 1) {
+                int tempData[8];
+                int i;
+                if (page_table[disk_page].dirty == 1) {
                     for (i = 0; i < 8; i++) {
                         tempData[i] = main_memory[physical_addr + i].data;
                         main_memory[physical_addr + i].data = data;
@@ -301,12 +302,12 @@ int main(int argc, char* argv[]) {
                 }
                 else {
                     main_memory[physical_addr + offset].data = data;
-                    page_table[virtual_page].dirty = 1;
                 }
-                
+
+                page_table[virtual_page].dirty = 1;
                 page_table[virtual_page].valid = 1;
                 page_table[virtual_page].page_num = avail_page;
-
+                
                 page_accesses[avail_page]++;
             }
         }

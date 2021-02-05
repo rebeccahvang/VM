@@ -13,6 +13,7 @@ read 25
 write 48 501
 read 48
 read 51
+showptable
 read 10
 read 30
 showptable

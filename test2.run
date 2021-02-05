@@ -1,0 +1,21 @@
+LRU
+write 10 202
+write 31 403
+read 19
+read 0
+read 12
+write 9 200
+showmain 1
+showptable
+write 25 90
+read 32
+read 25
+write 50 300
+read 50
+showmain 1
+showdisk 3
+showptable
+read 10
+write 10 203
+read 10
+quit

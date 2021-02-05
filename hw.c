@@ -41,7 +41,8 @@ struct m_entry main_memory[MM_ADDR];
 // disk / virtual memory
 struct m_entry disk[VM_ADDR];
 
-int oldest_page = 0;
+int oldest_index = 0;
+int oldest_page[4] = {-1,-1,-1,-1};
 int page_accesses[4];
 
 
@@ -71,11 +72,10 @@ void initialize(){
     // initialize disk memory
     int k;
     page_count = 0;
-    if (k % (8)== 0 && k != 0) {
-            page_count += 1;
-    }
-
     for (k = 0; k < VM_ADDR; k++) {
+        if (k % (8)== 0 && k != 0) {
+            page_count += 1;
+        }
         disk[k].page = page_count;
         disk[k].addr = k;
         disk[k].data = -1;
@@ -101,37 +101,30 @@ int find_available_page(){
     return -1;
 }
 
-// return address of main memory that corresponds to correct page
-int get_mm_addr(int avail_page){
-    int i;
-    for (i = 0; i < MM_ADDR; i++) {
-        if (main_memory[i].page == avail_page) {
-            return i;
+int fifo() {
+    int victim_page = oldest_page[0];
+
+    // shift the array
+    int i, j;
+    for (i = 0; i < 4; i++) {
+        for (j = i; j < 4; j++){
+            oldest_page[j] = oldest_page[j+1];
         }
     }
-
-    // not found
-    return -1;
-}
-
-int fifo() {
-    int victim_page;
-    victim_page = oldest_page++;
-
-    if (victim_page == 3) {
-        oldest_page = 0;
-    }
+    oldest_page[3] = -1;
+    oldest_index--;
+    
     return victim_page;
 }
 
 int lru() {
     int i;
     int victim_page = 0;
-    int min_access = 255;
+    int max_count = 0;
     for (i = 0; i < 4; i++){
-        if (page_accesses[i] < min_access){
+        if (page_accesses[i] > max_count){
             victim_page = i;
-            min_access = page_accesses[i];
+            max_count = page_accesses[i];
         }
     }
 
@@ -180,7 +173,19 @@ int main(int argc, char* argv[]) {
             // page is in main memory
             if (page_table[virtual_page].valid == 1){
                 printf("%d\n", main_memory[physical_addr].data);
-                page_accesses[ppage_num]++;
+
+                int i;
+                for (i = 0; i < 4; i++) {
+                    if (i != ppage_num) {
+                        page_accesses[i]++;
+                    }
+                    else if (i == ppage_num) {
+                        page_accesses[i] = 0;
+                    }
+                }
+                if (oldest_index < 4) {
+                    oldest_page[oldest_index++] = ppage_num;
+                }
             }
             // page is on disk
             else if (page_table[virtual_page].valid == 0){
@@ -241,7 +246,18 @@ int main(int argc, char* argv[]) {
                 page_table[virtual_page].dirty = 0;
                     
                 printf("%d\n", main_memory[physical_addr + offset].data);
-                page_accesses[avail_page]++;
+
+                for (i = 0; i < 4; i++) {
+                    if (i != avail_page) {
+                        page_accesses[i]++;
+                    }
+                    else if (i == avail_page) {
+                        page_accesses[i] = 0;
+                    }
+                }
+                if (oldest_index < 4) {
+                    oldest_page[oldest_index++] = avail_page;
+                }
             }
         }
         else if (strcmp(args[0], "write") == 0) {
@@ -256,7 +272,19 @@ int main(int argc, char* argv[]) {
             if (page_table[virtual_page].valid == 1){
                 page_table[virtual_page].dirty = 1;
                 main_memory[physical_addr].data = data;
-                page_accesses[ppage_num]++;
+                
+                int i;
+                for (i = 0; i < 4; i++) {
+                    if (i != ppage_num) {
+                        page_accesses[i]++;
+                    }
+                    else if (i == ppage_num) {
+                        page_accesses[i] = 0;
+                    }
+                }
+                if (oldest_index < 4) {
+                    oldest_page[oldest_index++] = ppage_num;
+                }
             }
             // page is on disk
             else if (page_table[virtual_page].valid == 0){
@@ -279,36 +307,50 @@ int main(int argc, char* argv[]) {
                     // if its dirty, new disk location
                     int i;
                     for (i = 0; i < 8; i++){
-                        if (page_table[i].page_num == avail_page && page_table[i].valid == 1){
+                        if (page_table[i].page_num == avail_page && page_table[i].dirty == 1){
                             disk_page = i;
                             break;
                         }
                     }
                 }
 
-                // // next available page is found                
+                // next available page is found                
                 int disk_addr = (disk_page * 8);
                 int physical_addr = (avail_page * 8);
                 
-
                 int tempData[8];
                 int i;
                 if (page_table[disk_page].dirty == 1) {
                     for (i = 0; i < 8; i++) {
                         tempData[i] = main_memory[physical_addr + i].data;
-                        main_memory[physical_addr + i].data = data;
+                        main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                         disk[disk_addr + i].data = tempData[i];
                     }
+
+                    // reset dirty entry
+                    page_table[disk_page].valid = 0;
+                    page_table[disk_page].dirty = 0;
+                    page_table[disk_page].page_num = disk_page;
                 }
-                else {
-                    main_memory[physical_addr + offset].data = data;
-                }
+
+                // write into main memory after swapping
+                main_memory[physical_addr + offset].data = data;
 
                 page_table[virtual_page].dirty = 1;
                 page_table[virtual_page].valid = 1;
                 page_table[virtual_page].page_num = avail_page;
                 
-                page_accesses[avail_page]++;
+                for (i = 0; i < 4; i++) {
+                    if (i != avail_page) {
+                        page_accesses[i]++;
+                    }
+                    else if (i == avail_page) {
+                        page_accesses[i] = 0;
+                    }
+                }
+                if (oldest_index < 4) {
+                    oldest_page[oldest_index++] = avail_page;
+                }
             }
         }
 

@@ -1,3 +1,6 @@
+// Hana Lee 40847074
+// Rebecca Huang 42285382
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -114,7 +117,6 @@ int lru() {
     int victim_page;
     int max_count = -1;
     for (i = 0; i < 4; i++){
-        // printf("%d LRU PAGE TRACKER\n", page_tracker[i]);
         if (page_tracker[i] > max_count && page_tracker[i] != -1){
             victim_page = i;
             max_count = page_tracker[i];
@@ -130,7 +132,6 @@ void increment_page_tracker(int num){
         if (page_tracker[i] != -1){
             page_tracker[i]++;
         }
-        // printf("%d PAGE TRACKER\n", page_tracker[i]);
     }
     if (page_tracker[num] == -1){
         page_tracker[num]++;
@@ -212,8 +213,6 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
-                // printf("%d SJFBDSKF\n", avail_page);
-
                 int disk_addr = (disk_page * 8);
                 int physical_addr = (avail_page * 8);
 
@@ -227,10 +226,7 @@ int main(int argc, char* argv[]) {
                         main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                         disk[disk_addr + i].data = tempData[i];
                     }
-                    // reset dirty entry
-                    page_table[disk_page].valid = 0;
-                    page_table[disk_page].dirty = 0;
-                    page_table[disk_page].page_num = disk_page;
+                    
                 }
                 // not dirty, so no swapping
                 else {
@@ -238,9 +234,15 @@ int main(int argc, char* argv[]) {
                         main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                     }
                 }
+
+                // reset dirty entry
+                page_table[disk_page].valid = 0;
+                page_table[disk_page].dirty = 0;
+                page_table[disk_page].page_num = disk_page;
+
                 page_table[virtual_page].valid = 1;
-                page_table[virtual_page].page_num = avail_page;
                 page_table[virtual_page].dirty = 0;
+                page_table[virtual_page].page_num = avail_page;
                     
                 printf("%d\n", main_memory[physical_addr + offset].data);
                 
@@ -286,7 +288,7 @@ int main(int argc, char* argv[]) {
                     // if its dirty, new disk location
                     int i;
                     for (i = 0; i < 8; i++){
-                        if (page_table[i].page_num == avail_page && page_table[i].dirty == 1){
+                        if (page_table[i].page_num == avail_page && page_table[i].valid == 1){
                             disk_page = i;
                             break;
                         }
@@ -305,15 +307,15 @@ int main(int argc, char* argv[]) {
                         main_memory[physical_addr + i].data = disk[disk_addr + i].data;
                         disk[disk_addr + i].data = tempData[i];
                     }
-
-                    // reset dirty entry
-                    page_table[disk_page].valid = 0;
-                    page_table[disk_page].dirty = 0;
-                    page_table[disk_page].page_num = disk_page;
                 }
 
                 // write into main memory after swapping
                 main_memory[physical_addr + offset].data = data;
+
+                // reset dirty entry
+                page_table[disk_page].valid = 0;
+                page_table[disk_page].dirty = 0;
+                page_table[disk_page].page_num = disk_page;
 
                 page_table[virtual_page].dirty = 1;
                 page_table[virtual_page].valid = 1;

@@ -91,7 +91,6 @@ int find_available_page(){
     }
 
     for (i = 0; i < 4; i++){
-        printf("%d MARK MEM", mark_memory[i]);
         if (mark_memory[i] == 0){
             return i;
         }
@@ -112,17 +111,30 @@ int fifo() {
 
 int lru() {
     int i;
-    int victim_page = 0;
-    int min_count = 255;
+    int victim_page;
+    int max_count = -1;
     for (i = 0; i < 4; i++){
-        if (page_tracker[i] < min_count && page_tracker[i] > -1){
+        // printf("%d LRU PAGE TRACKER\n", page_tracker[i]);
+        if (page_tracker[i] > max_count && page_tracker[i] != -1){
             victim_page = i;
-            min_count = page_tracker[i];
+            max_count = page_tracker[i];
         }
     }
-    page_tracker[victim_page] = -1;
 
     return victim_page;
+}
+
+void increment_page_tracker(int num){
+    int i;
+    for (i = 0; i < 4; i++){
+        if (page_tracker[i] != -1){
+            page_tracker[i]++;
+        }
+        // printf("%d PAGE TRACKER\n", page_tracker[i]);
+    }
+    if (page_tracker[num] == -1){
+        page_tracker[num]++;
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -167,7 +179,8 @@ int main(int argc, char* argv[]) {
             if (page_table[virtual_page].valid == 1){
                 printf("%d\n", main_memory[physical_addr].data);
                 
-                page_tracker[ppage_num]++;
+                page_tracker[ppage_num] = -1;
+                increment_page_tracker(ppage_num);
             }
             // page is on disk
             else if (page_table[virtual_page].valid == 0){
@@ -199,7 +212,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
 
-                printf("%d SJFBDSKF\n", avail_page);
+                // printf("%d SJFBDSKF\n", avail_page);
 
                 int disk_addr = (disk_page * 8);
                 int physical_addr = (avail_page * 8);
@@ -231,7 +244,8 @@ int main(int argc, char* argv[]) {
                     
                 printf("%d\n", main_memory[physical_addr + offset].data);
                 
-                page_tracker[avail_page]++;
+                page_tracker[avail_page] = -1;
+                increment_page_tracker(avail_page);
             }
         }
         else if (strcmp(args[0], "write") == 0) {
@@ -241,13 +255,15 @@ int main(int argc, char* argv[]) {
             int ppage_num = page_table[virtual_page].page_num;
             int offset = virtual_addr % 8;
             int physical_addr = (ppage_num * 8) + offset;
+
             
             // page is in main memory
             if (page_table[virtual_page].valid == 1){
                 page_table[virtual_page].dirty = 1;
                 main_memory[physical_addr].data = data;
-
-                page_tracker[ppage_num]++;
+                
+                page_tracker[ppage_num] = -1;
+                increment_page_tracker(ppage_num);
             }
             // page is on disk
             else if (page_table[virtual_page].valid == 0){
@@ -303,7 +319,8 @@ int main(int argc, char* argv[]) {
                 page_table[virtual_page].valid = 1;
                 page_table[virtual_page].page_num = avail_page;
                 
-                page_tracker[avail_page]++;
+                page_tracker[avail_page] = -1;
+                increment_page_tracker(avail_page);
             }
         }
 
